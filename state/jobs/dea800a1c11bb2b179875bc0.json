@@ -1,1 +1,1 @@
-{"id":"dea800a1c11bb2b179875bc0","study":"GSE245561","revision":"legacy","kind":"differential","status":"running","message":"Retrieving the versioned expression matrix","createdAt":1790346063.5245922,"updatedAt":1790346154.389449}
+{"id":"dea800a1c11bb2b179875bc0","study":"GSE245561","revision":"legacy","kind":"differential","status":"failed","message":"Immutable release asset differs: result.xlsx","createdAt":1790346063.5245922,"updatedAt":1790346161.85441}
