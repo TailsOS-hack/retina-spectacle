@@ -1,7 +1,7 @@
 import os,sys,json,time,hashlib,gzip,base64,traceback,tempfile,shutil,re
 from pathlib import Path
 import numpy as np
-from release_data import read_state,write_state,pack,publish,tag,retrieve
+from release_data import read_state,write_state,pack,publish,tag,retrieve,api
 from discovery import review_accessions,latest_geo_candidates,candidate_is_single_cell,geo_meta,arrayexpress_meta,source_fingerprint,bioproject_geo,download,expand,read_matrices,Unavailable
 from analysis import process,differential,embedding
 ROOT=Path(tempfile.gettempdir())/'retina-spectacle';ROOT.mkdir(exist_ok=True)
@@ -59,9 +59,17 @@ def refresh():
     if previous.get('status')=='ready':row.update(previous);row.update(refreshStatus='failed',refreshMessage=str(e)[:400],lastAttemptAt=time.time())
     else:row.update(status='unavailable' if isinstance(e,Unavailable) else 'failed',message=str(e)[:400],lastAttemptAt=time.time())
    time.sleep(.5)
-  c['freshness'].update(status='ready',lastCheckedAt=time.time(),newStudies=added,updatedStudies=changed,checkedStudies=checked,errors=errors)
+  c['freshness'].update(status='ready',message='Source check complete',updatedAt=time.time(),lastCheckedAt=time.time(),newStudies=added,updatedStudies=changed,checkedStudies=checked,errors=errors)
  except Exception as e:c['freshness'].update(status='failed',message=str(e)[:400],errors=errors);traceback.print_exc()
  write_state('state/catalog.json',c)
+
+def write_workbook(result,path):
+ from openpyxl import Workbook
+ wb=Workbook();ws=wb.active;ws.title='Exploratory markers';rows=result['rows']
+ fields=list(rows[0]) if rows else ['gene','log2FC','deltaPct','pctA','pctB','meanA','meanB','pvalue','qvalue']
+ ws.append(fields)
+ for row in rows:ws.append([row[key] for key in fields])
+ methods=wb.create_sheet('Methods');methods.append(['Method',result['method']]);methods.append(['Caution',result['warning']]);wb.save(path)
 
 def run_analysis(job_id):
  import scanpy as sc
@@ -71,6 +79,19 @@ def run_analysis(job_id):
  record=read_state('control/jobs/'+job_id+'.json');payload=json.loads(gzip.decompress(base64.b64decode(record.pop('payload'))));d=ROOT/job_id;d.mkdir(exist_ok=True)
  def progress(message):record.update(status='running',message=message,updatedAt=time.time());write_state('state/jobs/'+job_id+'.json',record)
  try:
+  # A runner may stop after publishing the result but before updating its status.
+  # Reuse those immutable results, including the original workbook ZIP bytes.
+  import requests
+  try:existing=api('GET','releases/tags/job-'+job_id)
+  except requests.HTTPError as e:
+   if e.response.status_code!=404:raise
+   existing=None
+  assets={item['name']:item for item in (existing or {}).get('assets',[]) if item['state']=='uploaded'}
+  if 'result.json.gz' in assets:
+   response=requests.get(assets['result.json.gz']['browser_download_url'],timeout=120);response.raise_for_status();result=json.loads(gzip.decompress(response.content))
+   if record['kind']=='differential' and 'result.xlsx' not in assets:
+    out=d/'result';out.mkdir(exist_ok=True);write_workbook(result,out/'result.xlsx');publish(out,'job-'+job_id,'Analysis '+job_id)
+   record.update(status='ready',message='Analysis complete',updatedAt=time.time());write_state('state/jobs/'+job_id+'.json',record);return
   progress('Retrieving the versioned expression matrix');path=retrieve(record['study'],record['revision'],d);a=sc.read_h5ad(path)
   if record['kind']=='differential':result=differential(a,payload['a'],payload['b'],payload.get('minPct',.1),payload.get('logfc',.25))
   else:
@@ -83,10 +104,7 @@ def run_analysis(job_id):
   out=d/'result';out.mkdir(exist_ok=True)
   with gzip.open(out/'result.json.gz','wt') as f:json.dump(result,f,separators=(',',':'))
   if record['kind']=='differential':
-   from openpyxl import Workbook
-   wb=Workbook();ws=wb.active;ws.title='Exploratory markers';rows=result['rows']
-   if rows:ws.append(list(rows[0]));[ws.append(list(r.values())) for r in rows]
-   methods=wb.create_sheet('Methods');methods.append(['Method',result['method']]);methods.append(['Caution',result['warning']]);wb.save(out/'result.xlsx')
+   write_workbook(result,out/'result.xlsx')
   publish(out,'job-'+job_id,'Analysis '+job_id);record.update(status='ready',message='Analysis complete',updatedAt=time.time())
  except Exception as e:traceback.print_exc();record.update(status='failed',message=str(e)[:400],updatedAt=time.time())
  write_state('state/jobs/'+job_id+'.json',record)
