@@ -10,7 +10,7 @@ Raw counts undergo documented gene/cell filtering, CP10K normalization, log1p, v
 
 ## Interface
 
-Data Select follows the original Spectacle study table. Dashboard pairs dimensionality reduction / heatmap / group 1 with violin plots / reclustering / group 2. Regional anatomical expression, sc-eQTL and private uploads require further datasets/workflows and are clearly marked unavailable. This project is not affiliated with Spectacle or the University of Iowa. Original inspiration: https://singlecell-eye.org/app/spectacle/ and https://github.com/drewvoigt10/cellcuratoR . Font Awesome is distributed under its included license.
+Data Select follows the original Spectacle study table. Dashboard pairs dimensionality reduction / heatmap / group 1 with violin plots / reclustering / group 2. Unfinished regional/sc-eQTL and private-upload sections have been removed. In the public-read deployment, unavailable new-job and manual-import controls are hidden. Saved analyses have a working navigation page. This project is not affiliated with Spectacle or the University of Iowa. Original inspiration: https://singlecell-eye.org/app/spectacle/ and https://github.com/drewvoigt10/cellcuratoR . Font Awesome is distributed under its included license.
 
 ## Operation
 
