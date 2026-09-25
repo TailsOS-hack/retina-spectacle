@@ -38,6 +38,25 @@ def write_state(path,obj):
 
 def tag(acc,rev):return 'dataset-'+acc.lower()+'-'+rev
 
+def browser_json(out,name,obj):
+ """Shard large column-oriented data so every Vercel response fits its limit."""
+ out=Path(out)
+ def encoded(value):return gzip.compress(json.dumps(value,separators=(',',':')).encode(),compresslevel=6,mtime=0)
+ data=encoded(obj)
+ if len(data)<=3_000_000:
+  (out/(name+'.json.gz')).write_bytes(data);return
+ if name not in ('cells','genes'):raise ValueError('Metadata exceeds response limit')
+ length=len(next(iter(obj.values())))
+ if not all(isinstance(v,list) and len(v)==length for v in obj.values()):raise ValueError('Invalid column lengths')
+ parts=[];start=0;chunk=20000 if name=='cells' else 5000
+ while start<length:
+  end=min(length,start+chunk);data=encoded({k:v[start:end] for k,v in obj.items()})
+  if len(data)>3_000_000:
+   if chunk==1:raise ValueError('One data row exceeds response limit')
+   chunk=max(1,chunk//2);continue
+  filename=f'{name}-{len(parts):03}.json';(out/(filename+'.gz')).write_bytes(data);parts.append(filename);start=end
+ (out/(name+'.json.gz')).write_bytes(encoded({'parts':parts,'rows':length}))
+
 def pack(directory,acc,rev,out):
  directory=Path(directory);out=Path(out);out.mkdir(parents=True,exist_ok=True)
  meta=json.loads((directory/'meta.json').read_text());meta['revision']=rev;cells=json.loads((directory/'cells.json').read_text())
@@ -48,8 +67,7 @@ def pack(directory,acc,rev,out):
   sums=[np.asarray(X.mean(axis=0)).ravel(),np.asarray((X>0).mean(axis=0)).ravel()*100]
   for i in range(len(meta['samples'])):sums.append(np.asarray(X[np.asarray(cells['sample'])==i].mean(axis=0)).ravel())
   genes={'genes':names,'summary':np.column_stack(sums).round(5).tolist()}
- for name,obj in [('meta',meta),('cells',cells),('genes',genes)]:
-  with gzip.open(out/(name+'.json.gz'),'wt',compresslevel=6) as f:json.dump(obj,f,separators=(',',':'))
+ for name,obj in [('meta',meta),('cells',cells),('genes',genes)]:browser_json(out,name,obj)
  index=[];part=0;size=0;f=open(out/'expression-000.bin','wb')
  try:
   for g in range(X.shape[1]):

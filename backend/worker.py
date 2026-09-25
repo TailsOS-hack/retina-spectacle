@@ -8,7 +8,7 @@ ROOT=Path(tempfile.gettempdir())/'retina-spectacle';ROOT.mkdir(exist_ok=True)
 def refresh():
  c=read_state('state/catalog.json',{'review':{},'studies':[],'catalog':{},'freshness':{}})
  c['freshness']={**c.get('freshness',{}),'status':'checking','startedAt':time.time()};write_state('state/catalog.json',c)
- errors=[];added=[];changed=[];checked=[]
+ errors=[];added=[];changed=[];checked=[];retry=os.environ.get('RETRY_SOURCE','')
  try:
   ids,sha=review_accessions();c['review']={'id':'PMC11214886','accessions':ids,'sha256':sha,'discoveredAt':time.time()}
   known=c.get('catalog',{}).get('accessions',[]);screened=c.get('catalog',{}).get('screened',{});mc={}
@@ -26,7 +26,7 @@ def refresh():
   for acc in targets:
    row=next((x for x in c['studies'] if x['id']==acc),None)
    if row is None:row={'id':acc,'status':'discovering','discoveryOrigin':'review' if acc in ids else 'live GEO search'};c['studies'].append(row)
-   if row.get('status') in ['controlled_access','raw_reads','unavailable','failed'] and time.time()-row.get('lastAttemptAt',0)<86400:continue
+   if acc!=retry and row.get('status') in ['controlled_access','raw_reads','unavailable','failed'] and time.time()-row.get('lastAttemptAt',0)<86400:continue
    if acc in records:row.update(records[acc],lastAttemptAt=time.time());continue
    if acc.startswith('PRJNA'):
     linked=bioproject_geo(acc);row.update(status='linked' if linked else 'raw_reads',linked=linked,message='Linked GEO sources: '+', '.join(linked) if linked else 'Public raw reads require alignment; no processed matrix discovered.',lastAttemptAt=time.time())
@@ -51,7 +51,7 @@ def refresh():
      if not re.fullmatch(r'[A-Za-z0-9_.%+\-]+',name):raise Unavailable('Unsupported source filename')
      p=raw/name;m['provenance'].append(download(url,p,print));files.extend(expand(p,raw/(name+'.expanded')))
     a,norm=read_matrices(files,m,print);process(a,m,d,print,source_normalized=norm);del a
-    stage=ROOT/('packed-'+acc);stage.mkdir(exist_ok=True);meta=pack(d,acc,rev,stage);publish(stage,tag(acc,rev),acc+' · '+rev)
+    stage=ROOT/('packed-'+acc);shutil.rmtree(stage,ignore_errors=True);stage.mkdir();meta=pack(d,acc,rev,stage);publish(stage,tag(acc,rev),acc+' · '+rev)
     row.update(status='ready',message='Ready — partial import' if meta.get('partialImport') else 'Ready for analysis',cells=meta['cells'],genes=meta['genes'],activeVersion=rev,publishedVersions=list(dict.fromkeys(previous.get('publishedVersions',['legacy'] if previous.get('status')=='ready' else [])+[rev])),sourceFingerprint=fp,partialImport=meta.get('partialImport',False),refreshStatus='idle',refreshMessage='',completedAt=time.time())
     changed.append(acc);completed+=1;write_state('state/catalog.json',c);shutil.rmtree(d);shutil.rmtree(stage)
    except Exception as e:
@@ -66,6 +66,8 @@ def refresh():
 def run_analysis(job_id):
  import scanpy as sc
  if not re.fullmatch('[a-f0-9]{24}',job_id):raise ValueError('Invalid job')
+ previous=read_state('state/jobs/'+job_id+'.json');
+ if previous and previous.get('status')=='ready':return
  record=read_state('control/jobs/'+job_id+'.json');payload=json.loads(gzip.decompress(base64.b64decode(record.pop('payload'))));d=ROOT/job_id;d.mkdir(exist_ok=True)
  def progress(message):record.update(status='running',message=message,updatedAt=time.time());write_state('state/jobs/'+job_id+'.json',record)
  try:

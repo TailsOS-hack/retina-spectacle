@@ -11,6 +11,10 @@ on:
         description: Analysis request identifier
         type: string
         default: ''
+      target:
+        description: Optional source to retry
+        type: string
+        default: ''
   schedule:
     - cron: '17,47 * * * *'
 permissions:
@@ -27,6 +31,7 @@ jobs:
       GITHUB_REPOSITORY: ${{ github.repository }}
       JOB_KIND: ${{ inputs.kind || 'refresh' }}
       JOB_ID: ${{ inputs.job_id }}
+      RETRY_SOURCE: ${{ inputs.target }}
       OMP_NUM_THREADS: '2'
       OPENBLAS_NUM_THREADS: '2'
       NUMBA_NUM_THREADS: '2'
