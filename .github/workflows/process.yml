@@ -43,7 +43,19 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - name: Prepare temporary runner storage
+        if: ${{ inputs.kind != 'analysis' }}
         run: sudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet
       - run: pip install -r backend/requirements.txt
       - name: Retrieve and process public data
         run: python backend/worker.py
+      - name: Record interrupted source checks
+        if: ${{ failure() && inputs.kind != 'analysis' }}
+        run: |
+          python - <<'PYCODE'
+          import sys,time
+          sys.path.insert(0,'backend')
+          from release_data import read_state,write_state
+          c=read_state('state/catalog.json')
+          c['freshness'].update(status='failed',message='The source-check runner stopped. Completed datasets remain available. A later visit or scheduled check can retry.',updatedAt=time.time())
+          write_state('state/catalog.json',c)
+          PYCODE

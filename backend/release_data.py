@@ -72,9 +72,10 @@ def pack(directory,acc,rev,out):
  try:
   for g in range(X.shape[1]):
    start,end=X.indptr[g:g+2];n=int(end-start)
-   if size+n*8>128*1024**2 and size:f.close();part+=1;size=0;f=open(out/f'expression-{part:03}.bin','wb')
    records=np.empty(n,dtype=[('i','<u4'),('v','<f4')]);records['i']=X.indices[start:end];records['v']=np.round(X.data[start:end],5)
-   index.append([part,size,n]);f.write(records.tobytes());size+=n*8
+   encoded=gzip.compress(records.tobytes(),compresslevel=3,mtime=0) if n else b''
+   if size+len(encoded)>128*1024**2 and size:f.close();part+=1;size=0;f=open(out/f'expression-{part:03}.bin','wb')
+   index.append([part,size,n,len(encoded)]);f.write(encoded);size+=len(encoded)
  finally:f.close()
  parts=[]
  with open(directory/'study.h5ad','rb') as src:
@@ -83,7 +84,7 @@ def pack(directory,acc,rev,out):
    data=src.read(512*1024**2)
    if not data:break
    name=f'study-{k:03}.h5part';(out/name).write_bytes(data);parts.append({'file':name,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()});k+=1
- obj={'cells':X.shape[0],'genes':names,'index':index,'matrixParts':parts,'revision':rev}
+ obj={'encoding':'gzip-per-gene','cells':X.shape[0],'genes':names,'index':index,'matrixParts':parts,'revision':rev}
  with gzip.open(out/'matrix-index.json.gz','wt',compresslevel=6) as f:json.dump(obj,f,separators=(',',':'))
  print(acc,'packed',X.shape,'nonzeros',X.nnz,flush=True)
  return meta
