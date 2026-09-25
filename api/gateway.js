@@ -3,9 +3,12 @@ const {createHash,timingSafeEqual}=require('node:crypto');
 const REPO=process.env.GITHUB_REPOSITORY||'TailsOS-hack/retina-spectacle';
 const cache=new Map();
 async function gh(path,method='GET',data){const r=await fetch(`https://api.github.com/repos/${REPO}/${path}`,{method,headers:{Authorization:`Bearer ${process.env.GH_TOKEN}`,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28',...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined});if(!r.ok){const e=Error(`Repository service returned ${r.status}`);e.status=r.status;throw e}return r.status===204?{}:r.json()}
-async function file(path){try{const f=await gh('contents/'+path);return {value:JSON.parse(Buffer.from(f.content,'base64')),sha:f.sha}}catch(e){if(e.status===404)return null;throw e}}
+async function file(path){
+ if(!process.env.GH_TOKEN){const r=await fetch(`https://raw.githubusercontent.com/${REPO}/main/${path}?v=${Math.floor(Date.now()/15000)}`);if(r.status===404)return null;if(!r.ok)throw Error('Public catalog is temporarily unavailable');return {value:await r.json()}}
+ try{const f=await gh('contents/'+path);return {value:JSON.parse(Buffer.from(f.content,'base64')),sha:f.sha}}catch(e){if(e.status===404)return null;throw e}
+}
 async function save(path,value,sha){return gh('contents/'+path,'PUT',{message:'Update '+path,content:Buffer.from(JSON.stringify(value)).toString('base64'),...(sha?{sha}:{})})}
-async function catalog(){const hit=cache.get('catalog');if(hit&&Date.now()-hit.at<20000)return hit.value;const f=await file('state/catalog.json');if(!f)throw Error('Dataset catalog is being initialized');cache.set('catalog',{at:Date.now(),value:f.value});return f.value}
+async function catalog(){const hit=cache.get('catalog');if(hit&&Date.now()-hit.at<20000)return hit.value;const f=await file('state/catalog.json');if(!f)throw Error('Dataset catalog is being initialized');const migration=await file('state/hosting.json');if(migration&&!migration.value.complete){for(const row of f.value.studies)if(row.status==='ready'&&(row.activeVersion||'legacy')==='legacy'&&!migration.value.ready.includes(row.id)){row.status='publishing';row.message='Transferring the processed public dataset to free storage'}}f.value.freshness={...f.value.freshness,mode:process.env.GH_TOKEN?'visits-and-schedule':'scheduled'};cache.set('catalog',{at:Date.now(),value:f.value});return f.value}
 function send(res,obj,status=200,ttl=0){const b=gzipSync(Buffer.from(JSON.stringify(obj)));res.statusCode=status;res.setHeader('Content-Type','application/json');res.setHeader('Content-Encoding','gzip');res.setHeader('Cache-Control',ttl?`public, max-age=${ttl}, s-maxage=${ttl}`:'no-store');res.end(b)}
 function auth(req){const a=Buffer.from(String(req.headers['x-admin-key']||'')),b=Buffer.from(process.env.ADMIN_KEY||'');if(!b.length||a.length!==b.length||!timingSafeEqual(a,b)){const e=Error('An analysis access code is required');e.status=401;throw e}}
 function checkedStudy(c,acc,revision){if(!/^(GSE\d+|E-MTAB-\d+)$/.test(acc)){const e=Error('Invalid accession');e.status=400;throw e}const row=c.studies.find(r=>r.id===acc);if(!row||row.status!=='ready'){const e=Error('Dataset is not ready');e.status=404;throw e}const rev=revision||row.activeVersion||'legacy';if(!(row.publishedVersions||['legacy']).includes(rev)){const e=Error('Unknown dataset version');e.status=404;throw e}return{row,rev}}
@@ -15,6 +18,7 @@ async function index(acc,rev){const key=acc+'/'+rev;let value=cache.get(key);if(
 async function dispatch(kind,id='',target=''){return gh('actions/workflows/process.yml/dispatches','POST',{ref:'main',inputs:{kind,job_id:id,target}})}
 async function refresh(){
  const c=await catalog(),f=c.freshness||{},now=Date.now()/1000,bucket=Math.floor(now/1800);
+ if(!process.env.GH_TOKEN)return {...f,started:false,mode:'scheduled',nextCheckAt:(bucket+1)*1800};
  if(now-(f.lastCheckedAt||0)<1800)return {...f,started:false,nextCheckAt:(bucket+1)*1800};
  const lock=await file('control/refresh-lock.json');
  if(lock?.value.bucket===bucket&&lock.value.status!=='failed')return {...f,status:'checking',started:false,nextCheckAt:(bucket+1)*1800};
@@ -23,8 +27,8 @@ async function refresh(){
  try{await dispatch('refresh')}catch(e){await save('control/refresh-lock.json',{bucket,status:'failed',startedAt:now},claim.content.sha).catch(()=>{});throw e}
  return {...f,status:'checking',started:true,startedAt:now,nextCheckAt:(bucket+1)*1800}
 }
-module.exports=async(req,res)=>{try{const u=new URL(req.url,'https://app.local');const path=u.pathname.replace(/^\/api\/?/,'').split('/').filter(Boolean);const [first,acc,type,arg]=path;
- if(req.method==='GET'&&first==='health')return send(res,{status:'ok',version:'3.0-free',provider:'GitHub Actions + Vercel',preloadedExpressionData:false});
+module.exports=async(req,res)=>{try{const u=new URL(req.url,'https://app.local');const path=(u.searchParams.get('route')||u.pathname.replace(/^\/api\/?/,'')).split('/').filter(Boolean);const [first,acc,type,arg]=path;
+ if(req.method==='GET'&&first==='health')return send(res,{status:'ok',version:'3.0-free',provider:'GitHub Actions + Vercel',preloadedExpressionData:false,analysesEnabled:Boolean(process.env.GH_TOKEN&&process.env.ADMIN_KEY),refreshMode:process.env.GH_TOKEN?'visits-and-schedule':'scheduled'});
  if(req.method==='GET'&&first==='studies')return send(res,await catalog(),200,15);
  if(req.method==='POST'&&first==='refresh')return send(res,await refresh());
  if(req.method==='POST'&&(first==='import-review'||first==='retry')){auth(req);if(first==='retry'){const c=await catalog();if(!c.studies.some(r=>r.id===acc))return send(res,{detail:'Unknown source'},400)}await dispatch('refresh','',first==='retry'?acc:'');return send(res,{status:'queued'});}

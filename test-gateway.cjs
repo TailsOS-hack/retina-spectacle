@@ -1,8 +1,8 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),zlib=require('node:zlib');
-const source=fs.readFileSync('api/[...path].js','utf8');
+const source=fs.readFileSync('api/gateway.js','utf8');
 function setup({failDispatch=false}={}){
  const files=new Map(),calls=[];let seq=0;
- const c={studies:[{id:'GSE245561',status:'ready',cells:8960,activeVersion:'legacy',publishedVersions:['legacy','new']}],freshness:{lastCheckedAt:0}};
+ const c={studies:[{id:'GSE245561',status:'ready',cells:8960,activeVersion:'legacy',publishedVersions:['legacy','new']},{id:'GSE175499',status:'ready',cells:150504,activeVersion:'legacy',publishedVersions:['legacy']}],freshness:{lastCheckedAt:0}};
  files.set('state/catalog.json',{value:c,sha:'first'});
  const fetch=async(url,options={})=>{
   calls.push([url,options.method||'GET']);
@@ -15,7 +15,7 @@ function setup({failDispatch=false}={}){
   }
   if(url.includes('/dispatches'))return new Response(null,{status:failDispatch?503:204});
   if(url.includes('/releases/download/')){
-   const name=url.split('/').pop(),base='../free-releases/GSE245561/';
+   const name=url.split('/').pop(),base='../free-releases/'+(url.includes('gse175499')?'GSE175499':'GSE245561')+'/';
    let b=fs.readFileSync(base+name);const range=options.headers?.Range;
    if(range){const[a,end]=range.slice(6).split('-').map(Number);b=b.subarray(a,end+1)}
    return new Response(b,{status:range?206:200});
@@ -35,6 +35,8 @@ function setup({failDispatch=false}={}){
  r=await a.request('GET','/api/data/GSE245561/gene/-1?revision=legacy');ok('Negative gene rejected',r.status===404);
  r=await a.request('GET','/api/data/GSE245561/gene/100?revision=legacy');ok('Real ranged vector decoded',r.status===200&&r.value.indices.length===r.value.values.length&&r.value.cells===8960);ok('Immutable version caching',r.headers['Cache-Control'].includes('31536000'));
  r=await a.request('GET','/api/data/GSE245561/gene/100');ok('Unpinned vectors expire promptly',r.headers['Cache-Control'].includes('max-age=30'));
+ r=await a.request('GET','/api/data/GSE175499/gene/100?revision=legacy');ok('Compressed large-study vector decoded',r.status===200&&r.value.cells===150504&&r.value.indices.length===r.value.values.length);
+ r=await a.request('GET','/api/data/GSE175499/cells.json?revision=legacy');ok('Large study uses bounded shards',r.status===200&&r.value.parts.length>1&&r.value.rows===150504);
  r=await a.request('POST','/api/analysis/GSE245561/differential',{a:[1,2,3],b:[4,5,6],minPct:.1,logfc:.25});ok('Analysis access protected',r.status===401);
  r=await a.request('POST','/api/analysis/GSE245561/differential',{a:[1,2,3],b:[3,4,5],minPct:.1,logfc:.25},true);ok('Overlapping groups rejected',r.status===400);
  r=await a.request('POST','/api/analysis/GSE245561/differential',{a:[1,2,3],b:[4,5,99999],minPct:.1,logfc:.25},true);ok('Out-of-range cell rejected',r.status===400);

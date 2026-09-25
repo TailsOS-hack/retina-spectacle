@@ -26,6 +26,7 @@ def refresh():
   for acc in targets:
    row=next((x for x in c['studies'] if x['id']==acc),None)
    if row is None:row={'id':acc,'status':'discovering','discoveryOrigin':'review' if acc in ids else 'live GEO search'};c['studies'].append(row)
+   if acc!=retry and row.get('refreshStatus')=='failed' and time.time()-row.get('lastAttemptAt',0)<86400:continue
    if acc!=retry and row.get('status') in ['controlled_access','raw_reads','unavailable','failed'] and time.time()-row.get('lastAttemptAt',0)<86400:continue
    if acc in records:row.update(records[acc],lastAttemptAt=time.time());continue
    if acc.startswith('PRJNA'):
