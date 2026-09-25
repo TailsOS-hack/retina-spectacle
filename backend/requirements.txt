@@ -1,0 +1,15 @@
+fastapi==0.115.14
+uvicorn==0.34.3
+scanpy==1.11.2
+numpy==2.2.6
+scipy==1.15.3
+pandas==2.2.3
+scikit-learn==1.6.1
+umap-learn==0.5.7
+igraph==0.11.9
+leidenalg==0.10.2
+h5py==3.14.0
+openpyxl==3.1.5
+requests==2.32.4
+
+openTSNE==1.0.4

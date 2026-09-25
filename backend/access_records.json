@@ -1,0 +1,5 @@
+{
+  "PRJCA006081": {"title":"Single-cell RNA analysis of diabetic macular edema","source":"https://ngdc.cncb.ac.cn/gsa-human/browse/HRA001139","status":"controlled_access","message":"The linked HRA001139 record requires Data Access Committee approval (HDAC000431). No expression files were imported.","checkedOn":"2026-09-25"},
+  "HRA000150": {"title":"Single-cell immunological landscape of PBMCs of patients with COVID-19","source":"https://ngdc.cncb.ac.cn/gsa-human/browse/HRA000150","status":"controlled_access","message":"This reused COVID-19 reference dataset requires Data Access Committee approval (HDAC000089). No expression files were imported.","checkedOn":"2026-09-25"},
+  "EGAS00001004561": {"title":"Cell types of the human retina and its organoids at single-cell resolution","source":"https://ega-archive.org/studies/EGAS00001004561","status":"controlled_access","message":"EGA dataset EGAD00001006350 has an access-request process. No controlled expression files were imported.","checkedOn":"2026-09-25"}
+}
