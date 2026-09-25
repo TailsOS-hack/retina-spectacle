@@ -5,3 +5,4 @@ state/
 README.md
 test-gateway.cjs
 .git/
+test/

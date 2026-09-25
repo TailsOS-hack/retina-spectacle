@@ -15,7 +15,7 @@ function setup({failDispatch=false}={}){
   }
   if(url.includes('/dispatches'))return new Response(null,{status:failDispatch?503:204});
   if(url.includes('/releases/download/')){
-   const name=url.split('/').pop(),base='../free-releases/'+(url.includes('gse175499')?'GSE175499':'GSE245561')+'/';
+   const name=url.split('/').pop(),base='test/fixtures/'+(url.includes('gse175499')?'GSE175499':'GSE245561')+'/';
    let b=fs.readFileSync(base+name);const range=options.headers?.Range;
    if(range){const[a,end]=range.slice(6).split('-').map(Number);b=b.subarray(a,end+1)}
    return new Response(b,{status:range?206:200});
@@ -47,5 +47,5 @@ function setup({failDispatch=false}={}){
  r=await a.request('GET','/api/jobs/'+jobs[0].value.id);ok('Queued job is recoverable by id',r.value.status==='queued');
  const b=setup(),refreshes=await Promise.all(Array.from({length:12},()=>b.request('POST','/api/refresh')));ok('Concurrent refreshes dispatch once',b.calls.filter(x=>x[0].includes('/dispatches')).length===1);ok('All refresh callers receive success',refreshes.every(x=>x.status===200));
  const f=setup({failDispatch:true});r=await f.request('POST','/api/refresh');ok('Failed dispatch is reported',r.status===503);ok('Failed dispatch releases the retry gate',f.files.get('control/refresh-lock.json').value.status==='failed');
- fs.writeFileSync('../free-gateway-test-report.json',JSON.stringify({checks,passed:checks.length},null,2));console.log(checks.length+' gateway checks passed');
+ fs.writeFileSync('test/gateway-report.json',JSON.stringify({checks,passed:checks.length},null,2));console.log(checks.length+' gateway checks passed');
 })().catch(e=>{console.error(e);process.exitCode=1});
