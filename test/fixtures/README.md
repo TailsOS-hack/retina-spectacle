@@ -1,1 +1,4 @@
 These small fixtures preserve gene number 100 exactly from each public legacy release. Only index 100 is populated. Counts and expression bytes are unchanged; the offset is moved to the start of the fixture file. The large-study cells file is its actual shard manifest. These fixtures are for API tests, not complete scientific datasets. Full matrices and source provenance are available in the project releases.
+
+
+`cohorts/` contains public sample metadata and group summaries for all 17 ready studies, used to verify the recorded condition labels. `statistics-oracle.json` contains small numerical edge cases and 100 cells per condition for Vegfa, Gfap and S100a9 from GSE178121. Expected p values come from SciPy's two-sided asymptotic `mannwhitneyu` with continuity correction, independently of the browser implementation. The full-study plot and browser checks additionally use the public release data.
